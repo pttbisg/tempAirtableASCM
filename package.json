@@ -1,0 +1,21 @@
+{
+  "name": "general-lambda-functions",
+  "version": "1.0.0",
+  "description": "General Lambda Functions",
+  "author": "",
+  "license": "MIT",
+  "scripts": {
+    "test": "jest"
+  },
+  "dependencies": {
+    "axios": "^0.21.1",
+    "axios-retry": "^3.1.9",
+    "dotenv": "^10.0.0",
+    "lodash": "^4.17.21",
+    "serverless-dotenv-plugin": "^3.9.0"
+  },
+  "devDependencies": {
+    "jest": "^27.0.6",
+    "serverless-offline": "^7.0.0"
+  }
+}

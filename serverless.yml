@@ -1,0 +1,33 @@
+service: general-lambda-functions
+
+frameworkVersion: '2'
+useDotenv: true
+
+provider:
+  name: aws
+  runtime: nodejs12.x
+  lambdaHashingVersion: '20201221'
+  region: ap-southeast-1
+  timeout: 600
+  environment:
+    STAGE: ${opt:stage, 'dev'}
+    BACKENDLESS_APP_KEY_PROD: ${env:BACKENDLESS_APP_KEY_PROD}
+    BACKENDLESS_APP_ID_PROD: ${env:BACKENDLESS_APP_ID_PROD}
+    AIRTABLE_API_KEY: ${env:AIRTABLE_API_KEY}
+
+functions:
+  isgOrderSourceToASCMLogistics:
+    handler: airtable.isgOrderSourceToASCMLogistics
+    events:
+      - http:
+          path: /airtable/ascm-logistics
+          method: GET
+          cors: true
+
+plugins:
+  - serverless-offline
+  - serverless-dotenv-plugin
+
+custom:
+  serverless-offline:
+    noPrependStageInUrl: true
