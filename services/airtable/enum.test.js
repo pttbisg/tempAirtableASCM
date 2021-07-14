@@ -11,6 +11,10 @@ describe('AIRTABLE', () => {
                 in: AIRTABLE.PTTBOutbound.TABLE.MainShopifyOrders,
                 out: "Main Shopify Orders (PTTB)",
             },
+            {
+                in: AIRTABLE.DEFAULT_DELAYER_MS,
+                out: 200,
+            },
         ];
 
         inputs.forEach(input => {

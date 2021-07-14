@@ -3,6 +3,7 @@
 const axios = require('axios');
 const axiosRetry = require('axios-retry');
 const _ = require('lodash');
+const sleep = require('sleep');
 
 axiosRetry(axios, {
     retries: 100,
@@ -11,6 +12,8 @@ axiosRetry(axios, {
 
 const { AIRTABLE } = require("./enum");
 
+const runningNumber = {};
+
 class AirtablePTTBOutboundMainShopifyOrdersService{
     constructor() {
         this.baseID = AIRTABLE.PTTBOutbound.ID;
@@ -18,18 +21,36 @@ class AirtablePTTBOutboundMainShopifyOrdersService{
     }
 
     async MigrateISGOrderSourceToASCMLogistics() {
+        let finalTotal = 0;
+        let finalResult = [];
+
+        let res = await this.runMigrateISGOrderSourceToASCMLogistics();
+        finalTotal += res.total;
+        finalResult = finalResult.concat(res.data);
+
+        while(res.total == 100) {
+            sleep.msleep(AIRTABLE.DEFAULT_DELAYER_MS);
+            res = await this.runMigrateISGOrderSourceToASCMLogistics();
+            finalTotal += res.total;
+            finalResult = finalResult.concat(res.data);
+        }
+
+        return {
+            total: finalTotal,
+            data: finalResult,
+        };
+    }
+
+    async runMigrateISGOrderSourceToASCMLogistics() {
         const isgOrders = await this.getISGOrderSourceFilterBySendToASCM(false);
-        // console.log(isgOrders);
-        
+
         const groupedISGOrders = this.groupISGOrderByName(isgOrders.records);
-        // console.log(groupedISGOrders);
 
         const convertedGroupedISGOrders = []
         for(let groupedISGOrder of groupedISGOrders) {
             groupedISGOrder = this.convertISGOrderToASCMLogisticsAirtable(groupedISGOrder);
             convertedGroupedISGOrders.push(groupedISGOrder);
         }
-        // console.log(convertedGroupedISGOrders);
 
         let convertedGroupedISGOrderGroupOf10 = []
         for(let i = 0; i < convertedGroupedISGOrders.length; i++) {
@@ -37,7 +58,6 @@ class AirtablePTTBOutboundMainShopifyOrdersService{
 
             if(convertedGroupedISGOrderGroupOf10.length == 10 || i == convertedGroupedISGOrders.length - 1) {
                 const ascmLogistics = await this.insertToASCMLogictics(convertedGroupedISGOrderGroupOf10);
-                // console.log(ascmLogistics.records);
 
                 convertedGroupedISGOrderGroupOf10 = [];
             }
@@ -86,28 +106,23 @@ class AirtablePTTBOutboundMainShopifyOrdersService{
     }
 
     groupISGOrderByName(isgOrders) {
-        let groupedISGOrder = {};
+        let result = [];
 
         for(let isgOrder of isgOrders) {
             isgOrder = isgOrder.fields;
 
-            if(groupedISGOrder[isgOrder['Name']] == undefined) {
-                groupedISGOrder[isgOrder['Name']] = {
-                    "Name": isgOrder['Name'],
-                    "LineItem": 0,
-                    "UFTracking": isgOrder['UFTracking'],
-                    "ASCM_ID": isgOrder['ASCM_ID'],
-                }
+            if(runningNumber[isgOrder['Name']] == undefined) {
+                runningNumber[isgOrder['Name']] = 1;
             }
 
-            groupedISGOrder[isgOrder['Name']]['LineItem'] += 1;
-        }
+            result.push({
+                "Name": isgOrder['Name'],
+                "LineItem": runningNumber[isgOrder['Name']],
+                "UFTracking": isgOrder['UFTracking'],
+                "ASCM_ID": isgOrder['ASCM_ID'],
+            });
 
-        const names = Object.keys(groupedISGOrder);
-
-        let result = [];
-        for(const name of names) {
-            result.push(groupedISGOrder[name]);
+            runningNumber[isgOrder['Name']] += 1;
         }
 
         return result;
