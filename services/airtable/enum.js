@@ -9,7 +9,8 @@ const AIRTABLE = {
             ISGOrderSource: "ISGOrderSource",
             ASCMLogistics: "ASCM_Logistics",
         }
-    }
+    },
+    DEFAULT_DELAYER_MS: 200,
 };
 
 module.exports = {
