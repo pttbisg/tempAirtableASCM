@@ -12,8 +12,6 @@ axiosRetry(axios, {
 
 const { AIRTABLE } = require("./enum");
 
-const runningNumber = {};
-
 class AirtablePTTBOutboundMainShopifyOrdersService{
     constructor() {
         this.baseID = AIRTABLE.PTTBOutbound.ID;
@@ -28,13 +26,6 @@ class AirtablePTTBOutboundMainShopifyOrdersService{
         finalTotal += res.total;
         finalResult = finalResult.concat(res.data);
 
-        while(res.total == 100) {
-            sleep.msleep(AIRTABLE.DEFAULT_DELAYER_MS);
-            res = await this.runMigrateISGOrderSourceToASCMLogistics();
-            finalTotal += res.total;
-            finalResult = finalResult.concat(res.data);
-        }
-
         return {
             total: finalTotal,
             data: finalResult,
@@ -42,9 +33,9 @@ class AirtablePTTBOutboundMainShopifyOrdersService{
     }
 
     async runMigrateISGOrderSourceToASCMLogistics() {
-        const isgOrders = await this.getISGOrderSourceFilterBySendToASCM(false);
+        const isgOrders = await this.getISGOrderSourceFilterBySendToASCM();
 
-        const groupedISGOrders = this.groupISGOrderByName(isgOrders.records);
+        const groupedISGOrders = await this.groupISGOrderByName(isgOrders.records);
 
         const convertedGroupedISGOrders = []
         for(let groupedISGOrder of groupedISGOrders) {
@@ -70,7 +61,7 @@ class AirtablePTTBOutboundMainShopifyOrdersService{
         for(let i = 0; i < isgOrders.records.length; i++) {
             isgOrdersGroupOf10.push(isgOrders.records[i]);
 
-            if(isgOrdersGroupOf10.length == 10 || i == isgOrders.length - 1) {
+            if(isgOrdersGroupOf10.length == 10 || i == isgOrders.records.length - 1) {
                 const result = await this.patchISGOrderSourceMarkSendToASCM(isgOrdersGroupOf10);
 
                 total += isgOrdersGroupOf10.length;
@@ -86,15 +77,10 @@ class AirtablePTTBOutboundMainShopifyOrdersService{
         };
     }
 
-    async getISGOrderSourceFilterBySendToASCM(SendToASCM) {
-        let checked = 0;;
-        if(SendToASCM == true) {
-            checked = 1;
-        }
-
+    async getISGOrderSourceFilterBySendToASCM() {
         const payload = {
             method: "GET",
-            url:`https://api.airtable.com/v0/${AIRTABLE.PTTBOutbound.ID}/${encodeURIComponent(AIRTABLE.PTTBOutbound.TABLE.ISGOrderSource)}?&filterByFormula=AND({SendToASCM} = ${checked})&sort%5B0%5D%5Bfield%5D=Name&sort%5B0%5D%5Bdirection%5D=asc`,
+            url:`https://api.airtable.com/v0/${AIRTABLE.PTTBOutbound.ID}/${encodeURIComponent(AIRTABLE.PTTBOutbound.TABLE.ISGOrderSource)}?&filterByFormula=AND({SendToASCM}=1, {ASCM_Logictics_remark}=0)&sort%5B0%5D%5Bfield%5D=Name&sort%5B0%5D%5Bdirection%5D=asc`,
             headers: {
                 Authorization: `Bearer ${AIRTABLE.API_KEY}`,
             },
@@ -105,14 +91,38 @@ class AirtablePTTBOutboundMainShopifyOrdersService{
         return res.data;
     }
 
-    groupISGOrderByName(isgOrders) {
+    async getLatestRunningNumberFor(deliveryOrderNumber) {
+        const payload = {
+            method: "GET",
+            url: `https://api.airtable.com/v0/${AIRTABLE.PTTBOutbound.ID}/${AIRTABLE.PTTBOutbound.TABLE.ASCMLogistics}?filterByFormula=AND(%7BDelivery+Order+Number+(Max+20+Chars)+*COMPULSORY+FIELD%7D%3D%22${encodeURIComponent(deliveryOrderNumber)}%22)&maxRecords=1&pageSize=1&sort%5B0%5D%5Bfield%5D=Delivery+Order+Line+Number+(Max+4+digits)+*COMPULSORY+FIELD&sort%5B0%5D%5Bdirection%5D=desc`,
+            headers: {
+                Authorization: `Bearer ${AIRTABLE.API_KEY}`,
+            },
+        };
+
+        const res = await axios(payload);
+
+        return _.get(res, "data.records[0].fields", {})['Delivery Order Line Number (Max 4 digits) *COMPULSORY FIELD'];
+    }
+
+    async groupISGOrderByName(isgOrders) {
         let result = [];
+
+        let runningNumber = {};
 
         for(let isgOrder of isgOrders) {
             isgOrder = isgOrder.fields;
 
             if(runningNumber[isgOrder['Name']] == undefined) {
-                runningNumber[isgOrder['Name']] = 1;
+                let latestRunningNumber = await this.getLatestRunningNumberFor(isgOrder["Name"]);
+
+                if(latestRunningNumber == undefined) {
+                    latestRunningNumber = 1;
+                } else {
+                    latestRunningNumber += 1;
+                }
+
+                runningNumber[isgOrder['Name']] = latestRunningNumber;
             }
 
             result.push({
@@ -139,8 +149,8 @@ class AirtablePTTBOutboundMainShopifyOrdersService{
 
         return {
             "fields": {
-                "Delivery Order Number\n(Max 20 Chars)\n*COMPULSORY FIELD": data.deliveryOrder,
-                "Delivery Order Line Number\n(Max 4 digits)\n*COMPULSORY FIELD":data.deliveryOrderLineNumber,
+                "Delivery Order Number (Max 20 Chars) *COMPULSORY FIELD": data.deliveryOrder,
+                "Delivery Order Line Number (Max 4 digits) *COMPULSORY FIELD":data.deliveryOrderLineNumber,
                 "Reference Number \n(Max 20 Chars)":  data.referenceNumber,
                 "Product ID (Max 13 Chars for 50x25mm Labels)":  data.productID,
                 "Customer ID\n(Max 20 Chars)\n*COMPULSORY FIELD":data.customerID,
@@ -170,7 +180,7 @@ class AirtablePTTBOutboundMainShopifyOrdersService{
     async patchISGOrderSourceMarkSendToASCM(isgOrders) {
         const markedISGOrders = isgOrders.map(isgOrder => {
             isgOrder.fields = {
-                'SendToASCM': true,
+                'ASCM_Logictics_remark': true,
             };
 
             delete isgOrder.createdTime;
