@@ -3,7 +3,6 @@
 const axios = require('axios');
 const axiosRetry = require('axios-retry');
 const _ = require('lodash');
-const sleep = require('sleep');
 
 axiosRetry(axios, {
     retries: 100,
