@@ -27,8 +27,10 @@ const isgOrderSourceToASCMLogistics = async (event) => {
 
     let res = {
       statusCode: 200,
-      total: total,
-      data: data,
+      body: JSON.stringify({
+        total: total,
+        data: data,
+      }),
     };
 
     console.log({
@@ -39,7 +41,7 @@ const isgOrderSourceToASCMLogistics = async (event) => {
     return res;
   } catch (err) {
     console.log(err);
-    console.error(err.toJSON());
+    //console.error(err);
 
     return {
       statusCode: 500,
